@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trò Chơi Ghép Nối: Ứng dụng của NH3</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+            min-height: 100vh;
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+        }
+
+        .card-item {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            user-select: none;
+        }
+
+        .card-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .card-item.selected {
+            border-color: #3b82f6;
+            background-color: #eff6ff;
+            box-shadow: 0 0 0 2px #3b82f6;
+        }
+
+        .card-item.matched {
+            border-color: #10b981;
+            background-color: #ecfdf5;
+            opacity: 0.8;
+            pointer-events: none;
+        }
+
+        .card-item.error {
+            animation: shake 0.4s ease-in-out;
+            border-color: #ef4444;
+            background-color: #fef2f2;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            50% { transform: translateX(5px); }
+            75% { transform: translateX(-5px); }
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .letter-box.filled {
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+            color: #ef4444;
+            font-weight: 800;
+        }
+
+        #svg-lines {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        line {
+            stroke: #3b82f6;
+            stroke-width: 3;
+            stroke-linecap: round;
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+            animation: drawLine 0.5s ease-out forwards;
+        }
+
+        @keyframes drawLine {
+            to { stroke-dashoffset: 0; }
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="text-gray-800 flex items-center justify-center p-4">
+
+    <div id="app" class="w-full max-w-5xl relative">
+        
+        <!-- MÀN HÌNH ĐĂNG NHẬP -->
+        <div id="screen-login" class="glass-panel rounded-2xl p-8 max-w-md mx-auto text-center transform transition-all duration-500">
+            <div class="mb-6 text-blue-600 text-5xl">
+                <i class="fa-solid fa-flask"></i>
+            </div>
+            <h1 class="text-3xl font-bold mb-2 text-gray-800">Thử Thách Hoá Học</h1>
+            <p class="text-gray-500 mb-8">Chủ đề: Ứng dụng của NH<sub>3</sub></p>
+            
+            <div class="space-y-4">
+                <input type="text" id="player-name" placeholder="Nhập tên của bạn..." 
+                    class="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg transition-all"
+                    autocomplete="off" maxlength="30">
+                
+                <button onclick="startGame()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1">
+                    <i class="fa-solid fa-play mr-2"></i> Bắt Đầu Game
+                </button>
+                
+                <button onclick="showScreen('screen-leaderboard')" class="w-full bg-white hover:bg-gray-50 text-gray-700 font-semibold py-3 px-4 rounded-xl border border-gray-300 shadow-sm transition-all">
+                    <i class="fa-solid fa-trophy text-yellow-500 mr-2"></i> Xem Bảng Xếp Hạng
+                </button>
+            </div>
+        </div>
+
+        <!-- MÀN HÌNH CHƠI CHÍNH -->
+        <div id="screen-game" class="hidden flex-col gap-6">
+            
+            <!-- Header Thông tin -->
+            <div class="glass-panel rounded-xl p-4 flex flex-wrap justify-between items-center shadow-sm gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="bg-blue-100 text-blue-700 p-2 rounded-lg">
+                        <i class="fa-solid fa-user"></i>
+                    </div>
+                    <span id="display-name" class="font-bold text-lg">Người chơi</span>
+                </div>
+                <div class="flex items-center gap-6">
+                    <div class="text-center">
+                        <p class="text-xs text-gray-500 uppercase font-semibold">Thời gian</p>
+                        <p id="display-time" class="font-mono text-xl font-bold">00:00</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-xs text-gray-500 uppercase font-semibold">Điểm số</p>
+                        <p id="display-score" class="font-mono text-xl font-bold text-green-600">0</p>
+                    </div>
+                    <button onclick="quitGame()" class="text-gray-400 hover:text-red-500 transition-colors" title="Thoát">
+                        <i class="fa-solid fa-right-from-bracket text-xl"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Từ khóa hàng ngang trên cùng -->
+            <div class="glass-panel rounded-xl p-6 shadow-sm flex flex-col items-center overflow-x-auto">
+                <h3 class="text-sm font-semibold text-gray-500 mb-4 uppercase tracking-wider">Từ khóa bí ẩn</h3>
+                <div id="top-row-container" class="flex gap-2 sm:gap-4 justify-center flex-nowrap min-w-max">
+                    <!-- Rendered by JS -->
+                </div>
+            </div>
+
+            <!-- Khu vực Ghép nối -->
+            <div class="relative w-full glass-panel rounded-xl p-4 sm:p-6 shadow-sm">
+                <!-- SVG để vẽ đường nối -->
+                <svg id="svg-lines"></svg>
+                
+                <div class="flex flex-col md:flex-row gap-8 justify-between relative z-20">
+                    <!-- CỘT A -->
+                    <div class="w-full md:w-5/12 flex flex-col gap-3" id="col-a-container">
+                        <div class="text-center font-bold text-lg mb-2 text-blue-800 border-b-2 border-blue-200 pb-2">CỘT A</div>
+                    </div>
+                    
+                    <!-- CỘT B -->
+                    <div class="w-full md:w-6/12 flex flex-col gap-3" id="col-b-container">
+                        <div class="text-center font-bold text-lg mb-2 text-blue-800 border-b-2 border-blue-200 pb-2">CỘT B</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MÀN HÌNH BẢNG XẾP HẠNG -->
+        <div id="screen-leaderboard" class="hidden glass-panel rounded-2xl p-6 sm:p-8 shadow-lg max-w-4xl mx-auto w-full">
+            <div class="flex justify-between items-center mb-6 border-b pb-4">
+                <h2 class="text-2xl font-bold text-gray-800"><i class="fa-solid fa-medal text-yellow-500 mr-2"></i> Bảng Xếp Hạng</h2>
+                <button onclick="showScreen('screen-login')" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-700 transition-colors whitespace-nowrap">
+                    <i class="fa-solid fa-arrow-left mr-2"></i> <span class="hidden sm:inline">Quay lại</span>
+                </button>
+            </div>
+            
+            <div class="overflow-x-auto rounded-xl border border-gray-200 custom-scrollbar max-h-[60vh]">
+                <table class="w-full text-left border-collapse min-w-[500px]">
+                    <thead class="bg-gray-50 text-gray-600 sticky top-0 z-10">
+                        <tr>
+                            <th class="px-4 py-3 border-b font-semibold text-center w-16">Hạng</th>
+                            <th class="px-4 py-3 border-b font-semibold">Tên người chơi</th>
+                            <th class="px-4 py-3 border-b font-semibold text-right">Điểm</th>
+                            <th class="px-4 py-3 border-b font-semibold text-right">Thời gian</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leaderboard-body" class="divide-y divide-gray-100">
+                        <!-- Rendered by JS -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mt-6 flex justify-end">
+                <button onclick="requestClearLeaderboard()" class="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors border border-red-200 font-semibold flex items-center">
+                    <i class="fa-solid fa-trash-can mr-2"></i> Xoá Bảng Thống Kê
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- CUSTOM MODALS -->
+    
+    <!-- Modal Thông báo Chung -->
+    <div id="modal-alert" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl transform scale-95 transition-transform" id="modal-alert-content">
+            <div class="text-center mb-6">
+                <div id="modal-alert-icon" class="text-5xl mb-4 text-blue-500">
+                    <i class="fa-solid fa-circle-info"></i>
+                </div>
+                <h3 id="modal-alert-title" class="text-2xl font-bold text-gray-800 mb-2">Thông báo</h3>
+                <p id="modal-alert-message" class="text-gray-600 text-lg">Nội dung thông báo...</p>
+            </div>
+            <button onclick="closeAlertModal()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition-colors">
+                Xác nhận
+            </button>
+        </div>
+    </div>
+
+    <!-- Modal Xác nhận (Confirm) -->
+    <div id="modal-confirm" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+            <div class="text-center mb-6">
+                <div class="text-5xl mb-4 text-red-500">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                </div>
+                <h3 class="text-2xl font-bold text-gray-800 mb-2">Xác nhận xoá</h3>
+                <p class="text-gray-600">Bạn có chắc chắn muốn xoá toàn bộ bảng xếp hạng? Hành động này không thể hoàn tác.</p>
+            </div>
+            <div class="flex gap-3">
+                <button onclick="closeConfirmModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 px-4 rounded-xl transition-colors">
+                    Huỷ
+                </button>
+                <button onclick="executeClearLeaderboard()" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-xl transition-colors">
+                    Xoá ngay
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Dữ liệu Game
+        const topRowSequence = [1, 2, 2, 3, 4, 1];
+        
+        const colAData = [
+            { id: 1, text: "NH<sub>3</sub> lỏng được dùng làm dung môi" },
+            { id: 2, text: "NH<sub>3</sub> là một tác nhân làm lạnh" },
+            { id: 3, text: "NH<sub>3</sub> dùng để sản xuất nitric acid" },
+            { id: 4, text: "NH<sub>3</sub> dùng để sản xuất phân đạm do" } // Added "do" based on original image context for flow, though request didn't explicitly mention it, I'll keep it accurate to column A
+        ];
+
+        // Cập nhật: Thêm "Do " ở đầu đáp án C
+        const colBData = [
+            { id: 'U', text: "Do dễ hoá lỏng, nhiệt hoá hơi cao, khi bay hơi, nó hút một lượng nhiệt lớn từ môi trường xung quanh, giúp làm lạnh <strong>(U)</strong>" },
+            { id: 'C', text: "Do có tính base, tác dụng với các acid tạo muối ammonium cung cấp đạm cho cây <strong>(C)</strong>" },
+            { id: 'H', text: "Do phân tử phân cực có khả năng hoà tan được nhiều chất <strong>(H)</strong>" },
+            { id: 'B', text: "Do NH<sub>3</sub> vừa có tính khử và tính base yếu <strong>(B)</strong>" },
+            { id: 'I', text: "Do có tính khử mạnh tác dụng với O<sub>2</sub> xúc tác tạo NO là nguyên liệu sản xuất nitric acid <strong>(I)</strong>" },
+            { id: 'E', text: "Vì NH<sub>3</sub> ở thể khí, không màu <strong>(E)</strong>" }
+        ];
+
+        const solutions = { 1: 'H', 2: 'U', 3: 'I', 4: 'C' };
+
+        // State
+        let gameState = {
+            playerName: '',
+            score: 0,
+            timeElapsed: 0,
+            timerInterval: null,
+            selectedA: null,
+            selectedB: null,
+            matchedPairs: [],
+            totalPairsToWin: Object.keys(solutions).length
+        };
+
+        const screens = ['screen-login', 'screen-game', 'screen-leaderboard'];
+        const svgCanvas = document.getElementById('svg-lines');
+
+        function showScreen(screenId) {
+            screens.forEach(id => document.getElementById(id).classList.add('hidden'));
+            document.getElementById(screenId).classList.remove('hidden');
+            
+            if (screenId === 'screen-leaderboard') {
+                renderLeaderboard();
+            }
+        }
+
+        function startGame() {
+            const nameInput = document.getElementById('player-name').value.trim();
+            if (!nameInput) {
+                showAlert('Lỗi', 'Vui lòng nhập tên của bạn để bắt đầu!', 'error');
+                return;
+            }
+
+            gameState = {
+                playerName: nameInput,
+                score: 0,
+                timeElapsed: 0,
+                timerInterval: null,
+                selectedA: null,
+                selectedB: null,
+                matchedPairs: [],
+                totalPairsToWin: Object.keys(solutions).length
+            };
+
+            document.getElementById('display-name').innerText = gameState.playerName;
+            updateScoreUI();
+            updateTimeUI();
+            
+            buildGameBoard();
+            showScreen('screen-game');
+            
+            gameState.timerInterval = setInterval(() => {
+                gameState.timeElapsed++;
+                updateTimeUI();
+            }, 1000);
+        }
+
+        function buildGameBoard() {
+            const topRowContainer = document.getElementById('top-row-container');
+            topRowContainer.innerHTML = '';
+            topRowSequence.forEach((num, index) => {
+                topRowContainer.innerHTML += `
+                    <div class="flex flex-col items-center">
+                        <div class="w-10 h-8 sm:w-12 flex items-center justify-center bg-gray-100 border-2 border-gray-300 rounded-t-lg font-bold text-gray-700 border-b-0">
+                            ${num}
+                        </div>
+                        <div id="top-box-${index}" class="letter-box w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center bg-white border-2 border-gray-300 rounded-b-lg text-xl sm:text-2xl transition-all shadow-inner">
+                        </div>
+                    </div>
+                `;
+            });
+
+            const colAContainer = document.getElementById('col-a-container');
+            colAContainer.innerHTML = '<div class="text-center font-bold text-lg mb-2 text-blue-800 border-b-2 border-blue-200 pb-2">CỘT A</div>';
+            colAData.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'card-item border-2 border-gray-200 rounded-xl p-3 sm:p-4 bg-white cursor-pointer flex items-center gap-3 sm:gap-4 text-sm sm:text-base';
+                div.dataset.id = item.id;
+                div.dataset.col = 'A';
+                div.innerHTML = `<span class="bg-blue-100 text-blue-800 font-bold w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center flex-shrink-0 text-sm">${item.id}</span> <span>${item.text}</span>`;
+                div.onclick = () => handleItemClick(div);
+                colAContainer.appendChild(div);
+            });
+
+            const colBContainer = document.getElementById('col-b-container');
+            colBContainer.innerHTML = '<div class="text-center font-bold text-lg mb-2 text-blue-800 border-b-2 border-blue-200 pb-2">CỘT B</div>';
+            colBData.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'card-item border-2 border-gray-200 rounded-xl p-3 sm:p-4 bg-white cursor-pointer text-sm sm:text-base leading-relaxed';
+                div.dataset.id = item.id;
+                div.dataset.col = 'B';
+                div.innerHTML = item.text;
+                div.onclick = () => handleItemClick(div);
+                colBContainer.appendChild(div);
+            });
+
+            svgCanvas.innerHTML = '';
+        }
+
+        function handleItemClick(element) {
+            if (element.classList.contains('matched')) return;
+
+            const col = element.dataset.col;
+
+            if (col === 'A') {
+                if (gameState.selectedA) gameState.selectedA.classList.remove('selected');
+                gameState.selectedA = element;
+                gameState.selectedA.classList.add('selected');
+            } else {
+                if (gameState.selectedB) gameState.selectedB.classList.remove('selected');
+                gameState.selectedB = element;
+                gameState.selectedB.classList.add('selected');
+            }
+
+            if (gameState.selectedA && gameState.selectedB) {
+                checkMatch();
+            }
+        }
+
+        function checkMatch() {
+            const idA = gameState.selectedA.dataset.id;
+            const idB = gameState.selectedB.dataset.id;
+            const elA = gameState.selectedA;
+            const elB = gameState.selectedB;
+
+            if (solutions[idA] === idB) {
+                gameState.score += 50;
+                updateScoreUI();
+                
+                elA.classList.remove('selected');
+                elB.classList.remove('selected');
+                elA.classList.add('matched');
+                elB.classList.add('matched');
+
+                gameState.matchedPairs.push({ elA, elB });
+                drawLine(elA, elB);
+                fillTopRow(idA, idB);
+
+                gameState.selectedA = null;
+                gameState.selectedB = null;
+
+                if (gameState.matchedPairs.length === gameState.totalPairsToWin) {
+                    handleGameWin();
+                }
+
+            } else {
+                gameState.score = Math.max(0, gameState.score - 10);
+                updateScoreUI();
+
+                elA.classList.add('error');
+                elB.classList.add('error');
+
+                setTimeout(() => {
+                    elA.classList.remove('error', 'selected');
+                    elB.classList.remove('error', 'selected');
+                }, 500);
+
+                gameState.selectedA = null;
+                gameState.selectedB = null;
+            }
+        }
+
+        function fillTopRow(numberId, letterVal) {
+            topRowSequence.forEach((num, index) => {
+                if (num == numberId) {
+                    const box = document.getElementById(`top-box-${index}`);
+                    box.innerText = letterVal;
+                    box.classList.add('filled');
+                }
+            });
+        }
+
+        function drawLine(elA, elB) {
+            const containerRect = svgCanvas.getBoundingClientRect();
+            const rectA = elA.getBoundingClientRect();
+            const rectB = elB.getBoundingClientRect();
+
+            const x1 = rectA.right - containerRect.left;
+            const y1 = rectA.top + (rectA.height / 2) - containerRect.top;
+            
+            const x2 = rectB.left - containerRect.left;
+            const y2 = rectB.top + (rectB.height / 2) - containerRect.top;
+
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', x1);
+            line.setAttribute('y1', y1);
+            line.setAttribute('x2', x2);
+            line.setAttribute('y2', y2);
+            svgCanvas.appendChild(line);
+        }
+
+        function redrawAllLines() {
+            if (gameState.matchedPairs.length === 0) return;
+            svgCanvas.innerHTML = '';
+            gameState.matchedPairs.forEach(pair => {
+                drawLine(pair.elA, pair.elB);
+            });
+        }
+
+        window.addEventListener('resize', redrawAllLines);
+
+        function updateScoreUI() {
+            document.getElementById('display-score').innerText = gameState.score;
+        }
+
+        function updateTimeUI() {
+            const m = Math.floor(gameState.timeElapsed / 60).toString().padStart(2, '0');
+            const s = (gameState.timeElapsed % 60).toString().padStart(2, '0');
+            document.getElementById('display-time').innerText = `${m}:${s}`;
+        }
+
+        function handleGameWin() {
+            clearInterval(gameState.timerInterval);
+            
+            let timeBonus = 0;
+            if (gameState.timeElapsed < 60) {
+                timeBonus = (60 - gameState.timeElapsed) * 2;
+                gameState.score += timeBonus;
+            }
+
+            setTimeout(() => {
+                const msg = `Chúc mừng <strong>${gameState.playerName}</strong> đã hoàn thành xuất sắc!<br><br>
+                             Điểm đạt được: <strong class="text-green-600 text-2xl">${gameState.score}</strong><br>
+                             Thời gian: <strong>${gameState.timeElapsed} giây</strong>`;
+                showAlert('Hoàn Thành!', msg, 'success', () => {
+                    saveToLeaderboard();
+                    showScreen('screen-leaderboard');
+                });
+            }, 600);
+        }
+
+        function quitGame() {
+            clearInterval(gameState.timerInterval);
+            showScreen('screen-login');
+        }
+
+        const STORAGE_KEY = 'nh3GameLeaderboard';
+
+        function saveToLeaderboard() {
+            let lb = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+            lb.push({
+                name: gameState.playerName,
+                score: gameState.score,
+                time: gameState.timeElapsed,
+                date: new Date().getTime()
+            });
+            lb.sort((a, b) => {
+                if (b.score !== a.score) return b.score - a.score;
+                return a.time - b.time;
+            });
+            
+            lb = lb.slice(0, 50);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(lb));
+        }
+
+        function renderLeaderboard() {
+            const tbody = document.getElementById('leaderboard-body');
+            tbody.innerHTML = '';
+            
+            const lb = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+            
+            if (lb.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" class="text-center py-8 text-gray-500">Chưa có dữ liệu. Hãy là người đầu tiên chơi!</td></tr>`;
+                return;
+            }
+
+            lb.forEach((entry, index) => {
+                let rankIcon = `<span class="font-bold text-gray-600">${index + 1}</span>`;
+                if (index === 0) rankIcon = `<i class="fa-solid fa-medal text-yellow-500 text-xl"></i>`;
+                else if (index === 1) rankIcon = `<i class="fa-solid fa-medal text-gray-400 text-xl"></i>`;
+                else if (index === 2) rankIcon = `<i class="fa-solid fa-medal text-amber-600 text-xl"></i>`;
+
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-gray-50 transition-colors whitespace-nowrap';
+                tr.innerHTML = `
+                    <td class="px-4 py-3 border-b text-center">${rankIcon}</td>
+                    <td class="px-4 py-3 border-b font-semibold text-gray-800 truncate max-w-[150px] sm:max-w-none" title="${entry.name}">${entry.name}</td>
+                    <td class="px-4 py-3 border-b text-right font-bold text-green-600">${entry.score}</td>
+                    <td class="px-4 py-3 border-b text-right text-gray-500">${entry.time}s</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function requestClearLeaderboard() {
+            openConfirmModal();
+        }
+
+        function executeClearLeaderboard() {
+            localStorage.removeItem(STORAGE_KEY);
+            renderLeaderboard();
+            closeConfirmModal();
+        }
+
+        let alertCallback = null;
+
+        function showAlert(title, message, type = 'info', callback = null) {
+            alertCallback = callback;
+            const modal = document.getElementById('modal-alert');
+            const icon = document.getElementById('modal-alert-icon');
+            
+            document.getElementById('modal-alert-title').innerHTML = title;
+            document.getElementById('modal-alert-message').innerHTML = message;
+            
+            if (type === 'success') {
+                icon.innerHTML = '<i class="fa-solid fa-circle-check"></i>';
+                icon.className = 'text-5xl mb-4 text-green-500';
+            } else if (type === 'error') {
+                icon.innerHTML = '<i class="fa-solid fa-circle-xmark"></i>';
+                icon.className = 'text-5xl mb-4 text-red-500';
+            } else {
+                icon.innerHTML = '<i class="fa-solid fa-circle-info"></i>';
+                icon.className = 'text-5xl mb-4 text-blue-500';
+            }
+
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                document.getElementById('modal-alert-content').classList.remove('scale-95');
+                document.getElementById('modal-alert-content').classList.add('scale-100');
+            }, 10);
+        }
+
+        function closeAlertModal() {
+            document.getElementById('modal-alert-content').classList.remove('scale-100');
+            document.getElementById('modal-alert-content').classList.add('scale-95');
+            setTimeout(() => {
+                document.getElementById('modal-alert').classList.add('hidden');
+                if (alertCallback) alertCallback();
+            }, 200);
+        }
+
+        function openConfirmModal() {
+            document.getElementById('modal-confirm').classList.remove('hidden');
+        }
+
+        function closeConfirmModal() {
+            document.getElementById('modal-confirm').classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
